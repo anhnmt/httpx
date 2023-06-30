@@ -44,7 +44,6 @@ type HTTPX struct {
 func New(options *Options) (*HTTPX, error) {
 	httpx := &HTTPX{}
 	fastdialerOpts := fastdialer.DefaultOptions
-	fastdialerOpts.DialerTimeout = options.Timeout
 	fastdialerOpts.CacheType = fastdialer.Memory
 	fastdialerOpts.WithCleanup = true
 	fastdialerOpts.EnableFallback = true
@@ -166,8 +165,9 @@ func New(options *Options) (*HTTPX, error) {
 		transport2.TLSClientConfig.ServerName = httpx.Options.SniName
 	}
 	httpx.client2 = &http.Client{
-		Transport: transport2,
-		Timeout:   httpx.Options.Timeout,
+		Transport:     transport2,
+		Timeout:       httpx.Options.Timeout,
+		CheckRedirect: redirectFunc,
 	}
 
 	httpx.htmlPolicy = bluemonday.NewPolicy()
@@ -363,7 +363,7 @@ func (h *HTTPX) NewRequest(method, targetURL string) (req *retryablehttp.Request
 
 // NewRequest from url
 func (h *HTTPX) NewRequestWithContext(ctx context.Context, method, targetURL string) (req *retryablehttp.Request, err error) {
-	urlx, err := urlutil.ParseURL(targetURL, h.Options.Unsafe)
+	urlx, err := urlutil.ParseURL(targetURL, false)
 	if err != nil {
 		return nil, err
 	}
