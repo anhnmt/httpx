@@ -606,7 +606,7 @@ func (r *Runner) RunEnumeration() {
 	}
 
 	// output routine
-	wgoutput := sizedwaitgroup.New(1)
+	wgoutput := sizedwaitgroup.New(5)
 	wgoutput.Add()
 	output := make(chan Result)
 	go func(output chan Result) {
@@ -1078,6 +1078,11 @@ func (r *Runner) analyze(hp *httpx.HTTPX, protocol string, target httpx.Target, 
 	if protocol == httpx.HTTPorHTTPS || protocol == httpx.HTTPandHTTPS {
 		protocol = httpx.HTTPS
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	// ctx, cancel := context.WithTimeout(context.Background(), r.hp.Options.Timeout)
+	defer cancel()
+
 	retried := false
 retry:
 	if scanopts.VHostInput && target.CustomHost == "" {
@@ -1114,6 +1119,7 @@ retry:
 	if err := URL.MergePath(scanopts.RequestURI, scanopts.Unsafe); err != nil {
 		gologger.Debug().Msgf("failed to merge paths of url %v and %v", URL.String(), scanopts.RequestURI)
 	}
+
 	var req *retryablehttp.Request
 	if target.CustomIP != "" {
 		var requestIP string
@@ -1122,11 +1128,11 @@ retry:
 		} else {
 			requestIP = target.CustomIP
 		}
-		ctx := context.WithValue(context.Background(), "ip", requestIP) // nolint
-		req, err = hp.NewRequestWithContext(ctx, method, URL.String())
-	} else {
-		req, err = hp.NewRequest(method, URL.String())
+
+		ctx = context.WithValue(ctx, "ip", requestIP) // nolint
 	}
+
+	req, err = hp.NewRequestWithContext(ctx, method, URL.String())
 	if err != nil {
 		return Result{URL: URL.String(), Input: origInput, Err: err}
 	}
@@ -1167,7 +1173,12 @@ retry:
 	var requestDump []byte
 	if scanopts.Unsafe {
 		var errDump error
-		requestDump, errDump = rawhttp.DumpRequestRaw(req.Method, req.URL.String(), reqURI, req.Header, req.Body, rawhttp.DefaultOptions)
+		opts := rawhttp.DefaultOptions
+		opts.Timeout = r.hp.Options.Timeout
+		opts.FollowRedirects = r.hp.Options.FollowRedirects
+		opts.MaxRedirects = r.hp.Options.MaxRedirects
+		opts.FastDialer = r.hp.Dialer
+		requestDump, errDump = rawhttp.DumpRequestRaw(req.Method, req.URL.String(), reqURI, req.Header, req.Body, opts)
 		if errDump != nil {
 			return Result{URL: URL.String(), Input: origInput, Err: errDump}
 		}
