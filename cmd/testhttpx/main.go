@@ -80,7 +80,6 @@ func main() {
 		NoFallbackScheme:          true,
 		MaxResponseBodySizeToSave: math.MaxUint32,
 		MaxResponseBodySizeToRead: math.MaxUint32,
-		ZTLS:                      true,
 		OnResult: func(r runner.Result) {
 			l := log.Info()
 
