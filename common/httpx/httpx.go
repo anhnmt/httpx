@@ -4,6 +4,8 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"math"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -17,7 +19,7 @@ import (
 	"github.com/projectdiscovery/fastdialer/fastdialer"
 	"github.com/projectdiscovery/fastdialer/fastdialer/ja3/impersonate"
 	"github.com/projectdiscovery/rawhttp"
-	retryablehttp "github.com/projectdiscovery/retryablehttp-go"
+	"github.com/projectdiscovery/retryablehttp-go"
 	"github.com/projectdiscovery/utils/generic"
 	pdhttputil "github.com/projectdiscovery/utils/http"
 	stringsutil "github.com/projectdiscovery/utils/strings"
@@ -42,6 +44,9 @@ type HTTPX struct {
 func New(options *Options) (*HTTPX, error) {
 	httpx := &HTTPX{}
 	fastdialerOpts := fastdialer.DefaultOptions
+	fastdialerOpts.DialerTimeout = options.Timeout
+	fastdialerOpts.CacheType = fastdialer.Memory
+	fastdialerOpts.WithCleanup = true
 	fastdialerOpts.EnableFallback = true
 	fastdialerOpts.Deny = options.Deny
 	fastdialerOpts.Allow = options.Allow
@@ -63,7 +68,17 @@ func New(options *Options) (*HTTPX, error) {
 
 	var retryablehttpOptions = retryablehttp.DefaultOptionsSpraying
 	retryablehttpOptions.Timeout = httpx.Options.Timeout
+	retryablehttpOptions.RetryWaitMax = 5 * time.Second
 	retryablehttpOptions.RetryMax = httpx.Options.RetryMax
+	retryablehttpOptions.Backoff = func(min, max time.Duration, attemptNum int, _ *http.Response) time.Duration {
+		base := float64(min)
+		capLevel := float64(max)
+
+		temp := math.Min(capLevel, base*math.Exp2(float64(attemptNum)))
+		halfTemp := int64(temp / 2)
+		sleep := halfTemp + rand.Int63n(halfTemp)
+		return time.Duration(sleep)
+	}
 
 	var redirectFunc = func(_ *http.Request, _ []*http.Request) error {
 		// Tell the http client to not follow redirect
@@ -263,7 +278,7 @@ get_response:
 	// number of lines
 	resp.Lines = len(strings.Split(respbodystr, "\n"))
 
-	if !h.Options.Unsafe && h.Options.TLSGrab {
+	if h.Options.TLSGrab {
 		if h.Options.ZTLS {
 			resp.TLSData = h.ZTLSGrab(httpresp)
 		} else {
@@ -295,9 +310,9 @@ type UnsafeOptions struct {
 
 // getResponse returns response from safe / unsafe request
 func (h *HTTPX) getResponse(req *retryablehttp.Request, unsafeOptions UnsafeOptions) (resp *http.Response, err error) {
-	if h.Options.Unsafe {
-		return h.doUnsafeWithOptions(req, unsafeOptions)
-	}
+	// if h.Options.Unsafe {
+	// 	return h.doUnsafeWithOptions(req, unsafeOptions)
+	// }
 	return h.client.Do(req)
 }
 
@@ -309,6 +324,9 @@ func (h *HTTPX) doUnsafeWithOptions(req *retryablehttp.Request, unsafeOptions Un
 	body := req.Body
 	options := rawhttp.DefaultOptions
 	options.Timeout = h.Options.Timeout
+	options.FollowRedirects = h.Options.FollowRedirects
+	options.MaxRedirects = h.Options.MaxRedirects
+	options.FastDialer = h.Dialer
 	return rawhttp.DoRawWithOptions(method, targetURL, unsafeOptions.URIPath, headers, body, options)
 }
 
@@ -378,7 +396,7 @@ func (h *HTTPX) SetCustomHeaders(r *retryablehttp.Request, headers map[string]st
 		}
 	}
 	if h.Options.RandomAgent {
-		r.Header.Set("User-Agent", uarand.GetRandom()) //nolint
+		r.Header.Set("User-Agent", uarand.GetRandom()) // nolint
 	}
 }
 

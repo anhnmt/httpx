@@ -52,6 +52,9 @@ func (h *HTTPX) TLSGrab(r *http.Response) *clients.Response {
 }
 
 func (h *HTTPX) ZTLSGrab(r *http.Response) *clients.Response {
+	if r.TLS == nil {
+		return nil
+	}
 	host := r.Request.URL.Host
 	hostname, port, _ := net.SplitHostPort(host)
 	if hostname == "" {
