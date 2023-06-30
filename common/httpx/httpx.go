@@ -363,7 +363,7 @@ func (h *HTTPX) NewRequest(method, targetURL string) (req *retryablehttp.Request
 
 // NewRequest from url
 func (h *HTTPX) NewRequestWithContext(ctx context.Context, method, targetURL string) (req *retryablehttp.Request, err error) {
-	urlx, err := urlutil.ParseURL(targetURL, false)
+	urlx, err := urlutil.ParseURL(targetURL, h.Options.Unsafe)
 	if err != nil {
 		return nil, err
 	}
