@@ -165,9 +165,8 @@ func New(options *Options) (*HTTPX, error) {
 		transport2.TLSClientConfig.ServerName = httpx.Options.SniName
 	}
 	httpx.client2 = &http.Client{
-		Transport:     transport2,
-		Timeout:       httpx.Options.Timeout,
-		CheckRedirect: redirectFunc,
+		Transport: transport2,
+		Timeout:   httpx.Options.Timeout,
 	}
 
 	httpx.htmlPolicy = bluemonday.NewPolicy()
@@ -189,6 +188,7 @@ get_response:
 	if httpresp == nil && err != nil {
 		return nil, err
 	}
+	defer httpresp.Body.Close()
 
 	var shouldIgnoreErrors, shouldIgnoreBodyErrors bool
 	switch {
@@ -227,16 +227,10 @@ get_response:
 	// 101 - Switching Protocols => websockets don't have a readable body
 	// 304 - Not Modified => no body the response terminates with latest header newline
 	if !generic.EqualsAny(httpresp.StatusCode, http.StatusSwitchingProtocols, http.StatusNotModified) {
-		var err error
 		respbody, err = io.ReadAll(io.LimitReader(httpresp.Body, h.Options.MaxResponseBodySizeToRead))
 		if err != nil && !shouldIgnoreBodyErrors {
 			return nil, err
 		}
-	}
-
-	closeErr := httpresp.Body.Close()
-	if closeErr != nil && !shouldIgnoreBodyErrors {
-		return nil, closeErr
 	}
 
 	// Todo: replace with https://github.com/projectdiscovery/utils/issues/110
@@ -245,7 +239,7 @@ get_response:
 
 	respbody, err = DecodeData(respbody, httpresp.Header)
 	if err != nil && !shouldIgnoreBodyErrors {
-		return nil, closeErr
+		return nil, err
 	}
 
 	respbodystr := string(respbody)
