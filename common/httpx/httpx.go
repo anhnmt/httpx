@@ -44,7 +44,7 @@ type HTTPX struct {
 func New(options *Options) (*HTTPX, error) {
 	httpx := &HTTPX{}
 	fastdialerOpts := fastdialer.DefaultOptions
-	fastdialerOpts.CacheType = fastdialer.Memory
+	// fastdialerOpts.CacheType = fastdialer.Memory
 	fastdialerOpts.WithCleanup = true
 	fastdialerOpts.EnableFallback = true
 	fastdialerOpts.Deny = options.Deny
